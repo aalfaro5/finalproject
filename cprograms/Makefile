@@ -1,13 +1,17 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -pthread
-TARGET =  matrixMulti
-SRC = matrixMulti.c
+CFLAGS = -Wall -pthread
+LIBS = -lm
+all: monte_carlo_pi matrixMulti multi-lookup
 
-all: $(TARGET)
+monte_carlo_pi: monte_carlo_pi.c
+	$(CC) $(CFLAGS) -o monte_carlo_pi monte_carlo_pi.c $(LIBS)
 
-$(TARGET): $(SRC)
-	$(CC) $(CFLAGS) $(SRC) -o $(TARGET)
+matrixMulti: matrixMulti.c
+	$(CC) $(CFLAGS) -o matrixMulti matrixMulti.c $(LIBS)
+
+multi-lookup: multi-lookup.c
+	$(CC) $(CFLAGS) -o multi-lookup multi-lookup.c $(LIBS)
 
 clean:
-	rm -f $(TARGET)
+	rm -f monte_carlo_pi matrixMulti multi-lookup
 
