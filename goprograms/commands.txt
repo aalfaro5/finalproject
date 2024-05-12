@@ -1,0 +1,3 @@
+go build example.go
+go run example.go
+
