@@ -98,10 +98,10 @@ func main() {
 	matrix2 := <-matrix2Chan
 
 	fmt.Println("First matrix:")
-	printMatrix(matrix1)
+	//printMatrix(matrix1)
 
 	fmt.Println("Second matrix:")
-	printMatrix(matrix2)
+	//printMatrix(matrix2)
 
 	// Perform matrix multiplication concurrently
 	go multiplyMatrices(matrix1, matrix2, resultChan, elapsedTimeChan)

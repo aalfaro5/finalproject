@@ -54,6 +54,10 @@ int main(int argc, char *argv[]) {
 
     // Create pthread variables
     pthread_t threads[dimension];
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    size_t stack_size = 1024 * 1024 * 8; // 8 MB stack size (adjust as needed)
+    pthread_attr_setstacksize(&attr, stack_size);
 
     // Create thread data
     ThreadData thread_data[dimension];
@@ -62,7 +66,7 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < dimension; i++) {
         thread_data[i].row_start = i;
         thread_data[i].row_end = i + 1;
-        pthread_create(&threads[i], NULL, multiply, &thread_data[i]);
+        pthread_create(&threads[i], &attr, multiply, &thread_data[i]);
     }
 
     // Join threads
