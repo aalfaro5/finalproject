@@ -6,6 +6,7 @@ import (
     "net"
     "os"
     "sync"
+    "time"
 )
 
 // Function to read URLs from input files and send them to the URL channel
@@ -27,6 +28,7 @@ func requester(files []string, urlChan chan<- string, wg *sync.WaitGroup) {
             fmt.Fprintf(os.Stderr, "Error reading from input file: %s\n", file)
         }
     }
+    close(urlChan)
 }
 
 // Function to read URLs from the URL channel, resolve them, and send results to the result channel
@@ -61,10 +63,12 @@ func writer(outputFile string, resultChan <-chan string, done chan<- bool) {
 }
 
 func main() {
-    if len(os.Args) < 4 {
+    if len(os.Args) < 3 {
         fmt.Fprintf(os.Stderr, "Usage: %s <input file1> ... <input fileN> <output file>\n", os.Args[0])
         os.Exit(1)
     }
+
+    start := time.Now()
 
     inputFiles := os.Args[1 : len(os.Args)-1]
     outputFile := os.Args[len(os.Args)-1]
@@ -91,12 +95,14 @@ func main() {
 
     // Wait for requester and resolvers to finish
     wg.Wait()
-    close(urlChan)
     close(resultChan)
 
     // Wait for writer to finish
     if success := <-done; !success {
         os.Exit(1)
     }
+
+    duration := time.Since(start).Seconds()
+    fmt.Printf("Processed and resolved all names in %.8f seconds\n", duration)
 }
 
