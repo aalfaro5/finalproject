@@ -27,7 +27,7 @@ func main() {
 	start := time.Now() // Start timing
 
 	// Number of Go routines and total samples
-	numWorkers := 4
+	numWorkers := 10
 	totalSamples := 1000000
 
 	// Channel for collecting results

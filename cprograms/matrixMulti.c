@@ -45,32 +45,38 @@ int main(int argc, char *argv[]) {
 
     // Print the input matrices
     printf("Matrix 1:\n");
-    printMatrix(matrix1);
+    //printMatrix(matrix1);
     printf("\nMatrix 2:\n");
-    printMatrix(matrix2);
+    //printMatrix(matrix2);
 
     // Start time tracking
     clock_t start_time = clock();
 
     // Create pthread variables
-    pthread_t threads[dimension];
+    pthread_t threads[10];
     pthread_attr_t attr;
     pthread_attr_init(&attr);
-    size_t stack_size = 1024 * 1024 * 8; // 8 MB stack size (adjust as needed)
+    size_t stack_size = 1024 * 1024 * 8;
     pthread_attr_setstacksize(&attr, stack_size);
 
     // Create thread data
-    ThreadData thread_data[dimension];
+    ThreadData thread_data[10];
+
+    // Calculate workload per thread
+    int workload = dimension / 10;
+    int extra_work = dimension % 10;
+    int offset = 0;
 
     // Create threads for matrix multiplication
-    for (int i = 0; i < dimension; i++) {
-        thread_data[i].row_start = i;
-        thread_data[i].row_end = i + 1;
+    for (int i = 0; i < 10; i++) {
+        thread_data[i].row_start = offset;
+        thread_data[i].row_end = offset + workload + (i < extra_work ? 1 : 0);
         pthread_create(&threads[i], &attr, multiply, &thread_data[i]);
+        offset = thread_data[i].row_end;
     }
 
     // Join threads
-    for (int i = 0; i < dimension; i++) {
+    for (int i = 0; i < 10; i++) {
         pthread_join(threads[i], NULL);
     }
 
@@ -79,7 +85,7 @@ int main(int argc, char *argv[]) {
 
     // Print the result matrix
     printf("\nResult:\n");
-    printMatrix(result);
+    //printMatrix(result);
 
     // Calculate and print the time taken
     double time_taken = ((double)(end_time - start_time)) / CLOCKS_PER_SEC;

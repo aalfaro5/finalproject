@@ -3,9 +3,10 @@
 #include <math.h>
 #include <pthread.h>
 #include <time.h>
+#include <unistd.h>
 
 #define TOTAL_POINTS 1000000
-#define NUM_THREADS 4
+#define NUM_THREADS 10
 
 int points_inside_circle = 0;
 pthread_mutex_t lock;
@@ -33,7 +34,14 @@ int main() {
 
     // Seed for random number generation
     srand(time(NULL));
-
+    
+    struct timespec start, end;
+    
+    // Get the start time
+    if (clock_gettime(CLOCK_MONOTONIC, &start) == -1) {
+        perror("clock_gettime");
+        exit(EXIT_FAILURE);
+    }
     // Initialize mutex
     pthread_mutex_init(&lock, NULL);
 
@@ -46,6 +54,12 @@ int main() {
     for (int i = 0; i < NUM_THREADS; i++) {
         pthread_join(threads[i], NULL);
     }
+    // Get the end time
+    clock_gettime(CLOCK_MONOTONIC, &end);
+
+    // Calculate the elapsed time in seconds with 8 decimal places
+    double elapsed_time = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+    printf("Total elapsed time: %.8f seconds\n", elapsed_time);
 
     // Destroy mutex
     pthread_mutex_destroy(&lock);
