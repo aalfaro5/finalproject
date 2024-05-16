@@ -35,6 +35,7 @@ func main() {
             fmt.Println("Error:", err)
             return
         }
+
         lineCount++
         if lineCount >= 1000 {
             break
