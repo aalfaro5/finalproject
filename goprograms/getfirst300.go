@@ -36,7 +36,7 @@ func main() {
             return
         }
         lineCount++
-        if lineCount >= 500 {
+        if lineCount >= 1000 {
             break
         }
     }
