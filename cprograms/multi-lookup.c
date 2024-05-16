@@ -1,233 +1,185 @@
 /*
 Student: Alejandro Alfaro
-Assignment 6, DNS Resolver, IPC
-Last Editted:  5/11/2024
+Assignment 5, DNS Resolver
+Last Editted:  4-26-24
 */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
 #include <unistd.h>
 #include <string.h>
-//get rid of queue.h, work with shared memory instead
-//#include "queue.h"
-
-
-// Add wait for fork usage
-#include <sys/wait.h>
-// add types for pid usage
-#include <sys/types.h>
-// add nman for nmap
-#include <sys/mman.h>
-#define INPUTFS "%1024s"
+#include <time.h> // Include for clock_gettime
+#include "queue.h"
 #include "util.h"
+
 #define MAX_INPUT_FILES 10
 #define THREAD_MAX 10
 #define MAX_RESOLVER_THREADS 10
 #define MIN_RESOLVER_THREADS 2
 #define MAX_NAME_LENGTH 1025
-#define BUFFER_SIZE 10
-// added in INET6_ADDRSTRLEN for storing ipv6 addresses
 #define MAX_IP_LENGTH INET6_ADDRSTRLEN
-
-//get rid of queue_size
-//#define QUEUE_SIZE 50
+#define QUEUE_SIZE 50
 
 typedef struct {
-    //get rid of queue
-    //queue hostname_queue;
-    //instead put buffer array
-    char buffer[MAX_INPUT_FILES][MAX_NAME_LENGTH];
-    // add in conditional variables
-    pthread_cond_t not_empty;
-    pthread_cond_t not_full;
+    queue hostname_queue;
     pthread_mutex_t mutex;
-    pthread_mutex_t outMutex;
-    // Set request flag
     int requesting_done;
-    // Add an index for the buffer
-    int index;
-    // max number of names
-    int max_names;
-    int total_files;
-    FILE** input_file;
-    FILE* output_file;
-} shared_memory;
+    int names_processed; // Track number of names processed
+    int max_names;       // Maximum number of names to process
+} BoundedBuffer;
 
-void requester_function(shared_memory* shared_mem) {
+BoundedBuffer buffer;
+
+void* requester_function(void* arg)
+{
     char line[MAX_NAME_LENGTH];
+    char* filename = (char*)arg;
+    FILE* input_file = fopen(filename, "r");
 
-    for(int i = 0; i < shared_mem->total_files; i++) {
-        while(fscanf(shared_mem->input_file[i], INPUTFS, line) > 0) {
-            // Critical section so lock
-            pthread_mutex_lock(&shared_mem->mutex);
-            //wait until buffer is not full
-            while (shared_mem->index == BUFFER_SIZE - 1) {
-                pthread_cond_wait(&shared_mem->not_full, &shared_mem->mutex);
-            }
-            //update buffer placement and copy host name to buffer at current index
-            shared_mem->index++;
-            strcpy(shared_mem->buffer[shared_mem->index], line);
-            // Send signal to the resolver 
-            pthread_cond_signal(&shared_mem->not_empty);
-            // End of critical section
-            pthread_mutex_unlock(&shared_mem->mutex);
-        }
-        //close at i
-        fclose(shared_mem->input_file[i]);
+    if (input_file == NULL)
+    {
+        fprintf(stderr, "Error opening input file: %s\n", filename);
+        pthread_exit(NULL);
     }
-    // Update request flag
-    shared_mem->requesting_done = 1;
+
+    // Read lines from input file and push them to the queue
+    while (fgets(line, sizeof(line), input_file) != NULL && buffer.names_processed < buffer.max_names)
+    {
+        line[strcspn(line, "\r\n")] = '\0';
+        pthread_mutex_lock(&buffer.mutex);
+        while(queue_is_full(&buffer.hostname_queue))
+        {
+            pthread_mutex_unlock(&buffer.mutex);
+            usleep(rand() % 1000); // Wait randomly if the queue is full
+            pthread_mutex_lock(&buffer.mutex);
+        }
+        char* hostname = strdup(line);
+        if(hostname)
+        {
+            queue_push(&buffer.hostname_queue, hostname);
+            buffer.names_processed++; // Increment names processed
+        }
+        pthread_mutex_unlock(&buffer.mutex);
+    }
+
+    fclose(input_file);
+    pthread_exit(NULL);
 }
 
-//void* resolver_function(void* arg)
-void resolver_function(shared_memory* shared_mem) {
-    //declare variables to hold hostnames (line) and ipaddresses (ipaddress)
-    char line[MAX_IP_LENGTH];
-    char ipaddress[INET6_ADDRSTRLEN];
+void* resolver_function(void* arg)
+{
+    char ip[MAX_IP_LENGTH];
+    FILE* output_file = (FILE*)arg;
 
-    while(1){
-        //lock for start of critical section
-        pthread_mutex_lock(&shared_mem->mutex);
-        //wait for the buffer to be filled
-        while (shared_mem->index < 0 && !shared_mem->requesting_done){
-            pthread_cond_wait(&shared_mem->not_empty, &shared_mem->mutex);
+    while (1) {
+        pthread_mutex_lock(&buffer.mutex);
+        if (buffer.requesting_done && queue_is_empty(&buffer.hostname_queue)) {
+            pthread_mutex_unlock(&buffer.mutex);
+            break; // Exit thread if requesting is done and queue is empty
         }
-        // if buffer is not empty 
-        if (shared_mem->index >= 0){
-            // copy host name to line
-            strcpy(line, shared_mem->buffer[shared_mem->index]);
-            // deincrement 
-            shared_mem->index--;
-            // Signal the requester
-            pthread_cond_signal(&shared_mem->not_full);
-            // end of critical
-            pthread_mutex_unlock(&shared_mem->mutex);
-
-            //dns lookup with hostname (line), copy ipaddress 
-            if(dnslookup(line, ipaddress, sizeof(ipaddress)) == UTIL_FAILURE){
-                fprintf(stderr, "dnslookup error: %s\n", line);
-                strncpy(ipaddress, "", sizeof(ipaddress));
+        while (queue_is_empty(&buffer.hostname_queue)) {
+            pthread_mutex_unlock(&buffer.mutex);
+            if (buffer.requesting_done && queue_is_empty(&buffer.hostname_queue)) {
+                pthread_mutex_unlock(&buffer.mutex);
+                break; // Exit thread if requesting is done and queue is empty
             }
+            // Wait for hostname in the queue
+            // Removed conditional here //pthread_cond_wait(&buffer_not_empty, &buffer.mutex);
+            pthread_mutex_lock(&buffer.mutex);
+        }
 
-            // Mutex lock and unlock for writing to output file
-            pthread_mutex_lock(&shared_mem->outMutex);
-            fprintf(shared_mem->output_file, "%s,%s\n", line, ipaddress);
-            pthread_mutex_unlock(&shared_mem->outMutex);
-        } 
-        else
-        {
-            // Unlock by default at end of function
-            pthread_mutex_unlock(&shared_mem->mutex);
-            // exit(0);
-            break;
+        char* hostname = queue_pop(&buffer.hostname_queue);
+        pthread_mutex_unlock(&buffer.mutex);
+        if (hostname != NULL) {
+            if (dnslookup(hostname, ip, sizeof(ip)) == UTIL_FAILURE) {
+                fprintf(stderr, "Error resolving hostname: %s\n", hostname);
+                ip[0] = '\0';
+            }
+            pthread_mutex_lock(&buffer.mutex);
+            fprintf(output_file, "%s,%s\n", hostname, ip);
+            pthread_mutex_unlock(&buffer.mutex);
+            free(hostname);
         }
     }
+    pthread_exit(NULL);
 }
 
 int main(int argc, char *argv[]) {
-    if(argc < 4 || argc > MAX_INPUT_FILES + 3) {
-      	fprintf(stderr, "Usage: %s <number of names> <input file1> ... <input fileN> <output file>\n", argv[0]);
+    if (argc < 4 || argc > MAX_INPUT_FILES + 3) {
+        fprintf(stderr, "Usage: %s <number of names> <input file1> ... <input fileN> <output file>\n", argv[0]);
         exit(EXIT_FAILURE);
     }
-    // Struct of bounded buffer for shared memory, initialize with nmap
-    shared_memory* shared= (shared_memory*) mmap(NULL, sizeof(shared_memory), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    //verify/error checking
-    if (shared== MAP_FAILED){
-        perror("Error on mmap on mutex\n");
-        exit(1);
-    }
-    // initialize the mutex between shared_memory
-    pthread_mutexattr_t mutex_thing;
-    pthread_mutexattr_init(&mutex_thing);
-    pthread_mutexattr_setpshared(&mutex_thing, PTHREAD_PROCESS_SHARED);
-    pthread_mutex_init(&(shared->mutex), &mutex_thing);
-    pthread_mutex_init(&(shared->outMutex), &mutex_thing);
-    // set conditions between shared memory
-    pthread_condattr_t conditional;
-    pthread_condattr_init(&conditional);
-    pthread_condattr_setpshared(&conditional, PTHREAD_PROCESS_SHARED);
-    pthread_cond_init(&shared->not_empty, &conditional);
-    pthread_cond_init(&shared->not_full, &conditional);
 
-    // Declare some pids
-    pid_t pid1, pid2;
-    // Keep track of statuses of process for children for when parent waits
-    int status1, status2;
-    // start index at -1 instead of 0
-    // Had an issue with output,
-    // Example
-/*
-Error looking up Address: Name or service not known
-dnslookup error: sdjjdsaf.com
-Error looking up Address: Name or service not known
-dnslookup error:
-*/
-    // Having the starting index at -1 got rid of the blank error
-    shared->index = -1;
-
-    // Error checking on output file
-    shared->output_file = fopen(argv[(argc-1)], "w");
-    if (!shared->output_file){
-        perror("Error opening output file");
-        return EXIT_FAILURE;
-    }
-    // Store all files in the buffer
-    shared->total_files = (argc - 2);
-    // Malloc to reserve memory
-    shared->input_file = (FILE**)malloc(shared->total_files * sizeof(FILE*));
-    // check if reserved properly
-    if (!shared->input_file){
-        perror("Error could not resize");
-        return EXIT_FAILURE;
+    buffer.max_names = atoi(argv[1]); // Set maximum number of names to process
+    if (buffer.max_names <= 0) {
+        fprintf(stderr, "Invalid number of names.\n");
+        exit(EXIT_FAILURE);
     }
 
-    //Error checking input files
-    //argc-2 for the count
-    for(int i = 0; i < (argc-2); i++){
-        //if unable to open then print error
-        if (!(shared->input_file[i] = fopen(argv[i+1], "r"))){
-            fprintf(stderr, "Error opening input file: #%d\n",(i+1));
-        }
+    FILE* output_file = fopen(argv[argc - 1], "w");
+    if (output_file == NULL) {
+        fprintf(stderr, "Error opening output file: %s\n", argv[argc - 1]);
+        exit(EXIT_FAILURE);
     }
 
-    // Start splitting the work with forking
-    // Because of the use of shared memory, resolver and requester now take in boundedBuffer 
-    // instead of file names.
-    // First fork, first child, store id1
-    if ((pid1 = fork()) == 0){
-        //call resolver
-        resolver_function(shared);
-        exit(0);
-    }
-    else{ 
-        // Second fork, second child, store id2
-        if ((pid2 = fork()) == 0){
-            // call resolver
-            resolver_function(shared);
-            exit(0);
-        } 
-        else{
-            // Parent by default should handle the requester
-            requester_function(shared);
-            // Wait for children to finish before parent
-            waitpid(pid1, &status1, 0);
-            waitpid(pid2, &status2, 0);
-        } 
+    if (queue_init(&buffer.hostname_queue, QUEUE_SIZE) == QUEUE_FAILURE) {
+        fprintf(stderr, "Error initializing the queue\n");
+        fclose(output_file);
+        exit(EXIT_FAILURE);
     }
 
-    // Clean up with destroy
-    pthread_condattr_destroy(&conditional);
-    pthread_mutexattr_destroy(&mutex_thing);
-    pthread_mutex_destroy(&(shared->mutex));
-    pthread_mutex_destroy(&(shared->outMutex));
-    pthread_cond_destroy(&(shared->not_full));
-    pthread_cond_destroy(&(shared->not_empty));
+    pthread_mutex_init(&buffer.mutex, NULL);
+    pthread_t requester_threads[argc - 3];
 
-    //Free memory and close output
-    free(shared->input_file);
-    fclose(shared->output_file);
+    int num_resolver_threads = THREAD_MAX;
+    if (num_resolver_threads > MAX_RESOLVER_THREADS) {
+        num_resolver_threads = MAX_RESOLVER_THREADS;
+    }
+    if (num_resolver_threads < MIN_RESOLVER_THREADS) {
+        num_resolver_threads = MIN_RESOLVER_THREADS;
+    }
 
-    // Exit at end 
+    // Record the start time
+    struct timespec start_time, end_time;
+    clock_gettime(CLOCK_MONOTONIC, &start_time);
+
+    // Create requester threads for each input file
+    for (int i = 2; i < argc - 1; i++) {
+        pthread_create(&requester_threads[i - 2], NULL, requester_function, argv[i]);
+    }
+
+    // Create resolver threads
+    pthread_t resolver_threads[num_resolver_threads];
+    for (int i = 0; i < num_resolver_threads; i++) {
+        pthread_create(&resolver_threads[i], NULL, resolver_function, output_file);
+    }
+
+    // Join requester threads
+    for (int i = 0; i < argc - 3; i++) {
+        pthread_join(requester_threads[i], NULL);
+    }
+
+    buffer.requesting_done = 1;
+
+    // Join resolver threads
+    for (int i = 0; i < num_resolver_threads; i++) {
+        pthread_join(resolver_threads[i], NULL);
+    }
+
+    // Record the end time
+    clock_gettime(CLOCK_MONOTONIC, &end_time);
+
+    fclose(output_file);
+    queue_cleanup(&buffer.hostname_queue);
+    pthread_mutex_destroy(&buffer.mutex);
+
+    // Calculate the elapsed time
+    double elapsed_time = (end_time.tv_sec - start_time.tv_sec) +
+                          (end_time.tv_nsec - start_time.tv_nsec) / 1e9;
+
+    // Print the total execution time
+    printf("Total execution time: %.6f seconds\n", elapsed_time);
+
     return EXIT_SUCCESS;
 }
+

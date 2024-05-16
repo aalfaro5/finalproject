@@ -7,10 +7,13 @@ LFLAGS = -pthread -lrt -lm
 all: lookup multi-lookup monte_carlo_pi matrixMulti
 
 # Target for the multi-lookup program
-multi-lookup: multi-lookup.o util.o
+multi-lookup: multi-lookup.o queue.o util.o
 	$(CC) $(LFLAGS) $^ -o $@
 
 multi-lookup.o: multi-lookup.c multi-lookup.h
+	$(CC) $(CFLAGS) -c $<
+
+queue.o: queue.c queue.h
 	$(CC) $(CFLAGS) -c $<
 
 util.o: util.c util.h
