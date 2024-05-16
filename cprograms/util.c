@@ -81,4 +81,3 @@ int dnslookup(const char* hostname, char* firstIPstr, int maxSize){
 
     return UTIL_SUCCESS;
 }
-

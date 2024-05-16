@@ -38,4 +38,3 @@ int dnslookup(const char* hostname,
 	      int maxSize);
 
 #endif
-
