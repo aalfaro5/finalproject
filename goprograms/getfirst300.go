@@ -36,7 +36,7 @@ func main() {
             return
         }
         lineCount++
-        if lineCount >= 500 {
+        if lineCount >= 1000 {
             break
         }
     }
@@ -47,6 +47,6 @@ func main() {
         return
     }
 
-    fmt.Println("First 500 lines copied to output.txt")
+    fmt.Println("First 1000 lines copied to output.txt")
 }
 
