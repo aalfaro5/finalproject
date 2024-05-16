@@ -27,7 +27,7 @@ func main() {
     scanner := bufio.NewScanner(inputFile)
 
     // Write the first 300 lines into the output file
-    lineCount := 100
+    lineCount := 0
     for scanner.Scan() {
         line := scanner.Text()
         _, err := fmt.Fprintln(outputFile, line)
