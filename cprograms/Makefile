@@ -1,17 +1,39 @@
 CC = gcc
-CFLAGS = -Wall -pthread
-LIBS = -lm
-all: monte_carlo_pi matrixMulti multi-lookup
+CFLAGS = -Wall -Wextra -pthread -g
+LFLAGS = -pthread -lrt -lm
 
+.PHONY: all clean
+
+all: lookup multi-lookup monte_carlo_pi matrixMulti
+
+# Target for the multi-lookup program
+multi-lookup: multi-lookup.o util.o
+	$(CC) $(LFLAGS) $^ -o $@
+
+multi-lookup.o: multi-lookup.c multi-lookup.h
+	$(CC) $(CFLAGS) -c $<
+
+util.o: util.c util.h
+	$(CC) $(CFLAGS) -c $<
+
+# Target for the lookup program
+lookup: lookup.o util.o
+	$(CC) $(LFLAGS) $^ -o $@
+
+lookup.o: lookup.c
+	$(CC) $(CFLAGS) -c $<
+
+# Target for the monte_carlo_pi program
 monte_carlo_pi: monte_carlo_pi.c
-	$(CC) $(CFLAGS) -o monte_carlo_pi monte_carlo_pi.c $(LIBS)
+	$(CC) $(CFLAGS) $< -o $@ $(LFLAGS)
 
+# Target for the matrixMulti program
 matrixMulti: matrixMulti.c
-	$(CC) $(CFLAGS) -o matrixMulti matrixMulti.c $(LIBS)
-
-multi-lookup: multi-lookup.c
-	$(CC) $(CFLAGS) -o multi-lookup multi-lookup.c $(LIBS)
+	$(CC) $(CFLAGS) $< -o $@ $(LFLAGS)
 
 clean:
-	rm -f monte_carlo_pi matrixMulti multi-lookup
+	rm -f lookup multi-lookup monte_carlo_pi matrixMulti
+	rm -f *.o
+	rm -f *~
+	rm -f results.txt
 

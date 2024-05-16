@@ -20,6 +20,7 @@ Last Editted:  5/11/2024
 // add nman for nmap
 #include <sys/mman.h>
 #define INPUTFS "%1024s"
+#include "util.h"
 #define MAX_INPUT_FILES 10
 #define THREAD_MAX 10
 #define MAX_RESOLVER_THREADS 10
@@ -28,8 +29,7 @@ Last Editted:  5/11/2024
 #define BUFFER_SIZE 10
 // added in INET6_ADDRSTRLEN for storing ipv6 addresses
 #define MAX_IP_LENGTH INET6_ADDRSTRLEN
-#include <time.h>
-#include "util.h"
+
 //get rid of queue_size
 //#define QUEUE_SIZE 50
 
@@ -126,14 +126,10 @@ void resolver_function(shared_memory* shared_mem) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc < 4 || argc > MAX_INPUT_FILES + 3) {
-        fprintf(stderr, "Usage: %s <number of names> <input file1> ... <input fileN> <output file>\n", argv[0]);
+    if(argc < 4 || argc > MAX_INPUT_FILES + 3) {
+      	fprintf(stderr, "Usage: %s <number of names> <input file1> ... <input fileN> <output file>\n", argv[0]);
         exit(EXIT_FAILURE);
     }
-    struct timespec start, end;
-
-    clock_gettime(CLOCK_MONOTONIC, &start);
-
     // Struct of bounded buffer for shared memory, initialize with nmap
     shared_memory* shared= (shared_memory*) mmap(NULL, sizeof(shared_memory), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     //verify/error checking
@@ -219,17 +215,6 @@ dnslookup error:
             waitpid(pid2, &status2, 0);
         } 
     }
-    clock_gettime(CLOCK_MONOTONIC, &end);
-
-    double seconds = end.tv_sec - start.tv_sec;
-    double nanoseconds = end.tv_nsec - start.tv_nsec;
-
-    if (nanoseconds < 0) {
-        seconds -= 1;
-        nanoseconds += 1000000000;
-    }
-
-    printf("Total time taken: %.8lf seconds\n", seconds + nanoseconds / 1000000000);
 
     // Clean up with destroy
     pthread_condattr_destroy(&conditional);
@@ -246,4 +231,3 @@ dnslookup error:
     // Exit at end 
     return EXIT_SUCCESS;
 }
-
