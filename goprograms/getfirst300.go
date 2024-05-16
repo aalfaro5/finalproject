@@ -27,7 +27,7 @@ func main() {
     scanner := bufio.NewScanner(inputFile)
 
     // Write the first 300 lines into the output file
-    lineCount := 0
+    lineCount := 100
     for scanner.Scan() {
         line := scanner.Text()
         _, err := fmt.Fprintln(outputFile, line)
@@ -36,7 +36,7 @@ func main() {
             return
         }
         lineCount++
-        if lineCount >= 1000 {
+        if lineCount >= 100 {
             break
         }
     }
